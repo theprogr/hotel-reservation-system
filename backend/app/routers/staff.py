@@ -23,7 +23,7 @@ any_staff = require_staff("manager", "front_desk", "maintenance")
 # --- Dashboard ---
 @router.get("/summary")
 def summary(user: dict = Depends(any_staff)):
-    return fetch_one(
+    row = fetch_one(
         """SELECT
              (SELECT COUNT(*) FROM rooms r WHERE (%(h)s::int IS NULL OR r.hotel_id = %(h)s)) AS total_rooms,
              (SELECT COUNT(*) FROM reservation_details d WHERE d.status = 'checked_in'
@@ -40,6 +40,9 @@ def summary(user: dict = Depends(any_staff)):
                   AND (%(h)s::int IS NULL OR r.hotel_id = %(h)s)) AS revenue_30_days""",
         {"h": hotel_scope(user)},
     )
+    if user["access_level"] == "maintenance":
+        row.pop("revenue_30_days")  # money figures aren't needed for repair work
+    return row
 
 
 # --- Reservations ---

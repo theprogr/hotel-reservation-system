@@ -16,3 +16,6 @@ dist/
 # Tools and OS
 graphify-out/
 .DS_Store
+
+# Local editor and app settings
+.claude/

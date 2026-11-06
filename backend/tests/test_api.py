@@ -244,6 +244,11 @@ def test_managers_cannot_raise_access(client, world):
     assert client.post("/staff/employees", json={**body, "role_id": desk_role}, headers=manager).status_code == 201
 
 
+def test_technicians_cannot_see_revenue(client, world):
+    assert "revenue_30_days" not in client.get("/staff/summary", headers=world["tech_a"]).json()
+    assert "revenue_30_days" in client.get("/staff/summary", headers=world["manager_a"]).json()
+
+
 def test_front_desk_cannot_see_salaries_or_manage_rooms(client, world):
     desk = world["desk_a"]
     assert all("salary" not in e for e in client.get("/staff/employees", headers=desk).json())
