@@ -15,7 +15,6 @@ from .security import require_staff
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    pool.open()
     yield
     pool.close()
 

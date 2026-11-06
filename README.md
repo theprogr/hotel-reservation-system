@@ -72,7 +72,7 @@ CREATE DATABASE hotel_v2;
 ```bash
 cd backend
 python3.13 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/pip install -r requirements-dev.txt
 cp .env.example .env
 ```
 

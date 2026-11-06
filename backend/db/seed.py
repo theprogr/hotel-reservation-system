@@ -17,7 +17,8 @@ from dotenv import load_dotenv
 HERE = Path(__file__).resolve().parent
 load_dotenv(HERE.parent / ".env")
 
-DEMO_PASSWORD = "Demo1234!"  # Sample accounts only. See README.
+# The local default is public in the README, so a deployed database must set its own.
+DEMO_PASSWORD = os.getenv("SEED_PASSWORD", "Demo1234!")
 
 CITIES = ["Almaty", "Astana", "Shymkent", "Aktau", "Atyrau", "Karaganda", "Turkistan", "Taraz", "Pavlodar", "Kostanay"]
 HOTEL_WORDS = ["Grand", "Silk Road", "Steppe", "Mountain View", "Altyn", "Central", "Nomad", "City", "Riverside", "Royal"]

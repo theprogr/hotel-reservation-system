@@ -7,12 +7,18 @@ from psycopg_pool import ConnectionPool
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
+# Works locally and on serverless hosting, where the app can be frozen between requests
+# and the hosted database can go to sleep:
+# - connections open only when needed (min_size=0) and are tested before use (check)
+# - prepare_threshold=None keeps it compatible with the host's connection pooler
 pool = ConnectionPool(
     os.environ["DATABASE_URL"],
-    min_size=1,
-    max_size=10,
-    kwargs={"row_factory": dict_row},
-    open=False,
+    min_size=0,
+    max_size=int(os.getenv("DB_POOL_MAX", "10")),
+    max_idle=60,
+    check=ConnectionPool.check_connection,
+    kwargs={"row_factory": dict_row, "prepare_threshold": None},
+    open=True,
 )
 
 
