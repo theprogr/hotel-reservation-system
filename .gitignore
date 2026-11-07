@@ -19,3 +19,4 @@ graphify-out/
 
 # Local editor and app settings
 .claude/
+.neon
