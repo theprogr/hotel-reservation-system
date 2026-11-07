@@ -2,7 +2,9 @@
 
 A full-stack hotel booking app. Guests search for free rooms, book and pay. Staff manage reservations, rooms, maintenance and employees, with access limited by role and hotel.
 
-**Stack:** PostgreSQL · FastAPI (Python) with hand-written SQL · React (Vite)
+**Live site:** https://hotel-reservation-kz.vercel.app
+
+**Stack:** PostgreSQL (Neon) · FastAPI (Python) with hand-written SQL · React (Vite) · hosted on Vercel
 
 ## The main feature: no double bookings
 
@@ -99,7 +101,7 @@ Open http://localhost:5173
 
 ### Sample accounts
 
-These exist only in the local sample data. All use the password `Demo1234!`.
+These passwords work only on your local copy; the live site's accounts use a different, private password. All use the local password `Demo1234!`.
 
 | Email | Role |
 |---|---|
@@ -109,7 +111,7 @@ These exist only in the local sample data. All use the password `Demo1234!`.
 | manager@hotel.test | Manager |
 | admin@hotel.test | Admin |
 
-Don't deploy the sample data publicly, since anyone could log in with these accounts.
+Before seeding a public database, set `SEED_PASSWORD` to a private value, so nobody can log in with this password.
 
 ## Tests
 
@@ -127,4 +129,4 @@ Tests run against the real database, and each run removes the data it creates. T
 - Expire unpaid `pending` bookings, which currently hold a room until cancelled
 - Limit repeated login attempts
 - Real payments through a payment provider
-- Deploy with a live demo
+- Live staff dashboard updates with Neon Realtime
