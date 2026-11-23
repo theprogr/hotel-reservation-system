@@ -44,17 +44,17 @@ def create_reservation(body: ReservationIn, user: dict = Depends(require_guest))
         # Bookings for the same room wait in line here, one at a time. Without this lock,
         # simultaneous inserts can deadlock while checking the exclusion constraint.
         # NO KEY UPDATE still lets other tables reference the room, so unrelated work isn't blocked.
-        room = conn.execute("SELECT status FROM rooms WHERE id = %s FOR NO KEY UPDATE", (body.room_id,)).fetchone()
+        room = conn.execute("SELECT id FROM rooms WHERE id = %s FOR NO KEY UPDATE", (body.room_id,)).fetchone()
         if not room:
             raise HTTPException(404, "Room not found.")
-        if room["status"] != "available":
-            raise HTTPException(409, "This room isn't open for booking right now.")
-        # The no_double_booking constraint is the real guard. If this overlaps another
-        # booking, Postgres raises an error, and main.py turns it into a clear 409.
+        # The database does the checking:
+        # - trg_reservation_rules: the room must be open and big enough for the group
+        # - no_double_booking: no overlap with another booking
+        # main.py turns their errors into clear messages.
         new = conn.execute(
-            """INSERT INTO reservations (guest_id, room_id, check_in, check_out)
-               VALUES (%s, %s, %s, %s) RETURNING id""",
-            (user["id"], body.room_id, body.check_in, body.check_out),
+            """INSERT INTO reservations (guest_id, room_id, check_in, check_out, num_guests)
+               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+            (user["id"], body.room_id, body.check_in, body.check_out, body.num_guests),
         ).fetchone()
         return conn.execute(DETAILS, (new["id"],)).fetchone()
 
@@ -74,11 +74,13 @@ def pay(reservation_id: int, body: PaymentIn, user: dict = Depends(current_user)
         res = locked_reservation(conn, reservation_id, user)
         if res["status"] != "pending":
             raise HTTPException(409, f"A {res['status'].replace('_', ' ')} reservation can't be paid.")
+        # calculate_reservation_total() prices the stay, trg_validate_payment checks it,
+        # and trg_confirm_paid_reservation confirms the booking.
         conn.execute(
-            "INSERT INTO payments (reservation_id, amount, payment_method) VALUES (%s, %s, %s)",
-            (reservation_id, res["total_price"], body.payment_method),
+            """INSERT INTO payments (reservation_id, amount, payment_method)
+               VALUES (%(id)s, calculate_reservation_total(%(id)s), %(method)s)""",
+            {"id": reservation_id, "method": body.payment_method},
         )
-        conn.execute("UPDATE reservations SET status = 'confirmed' WHERE id = %s", (reservation_id,))
         return conn.execute(DETAILS, (reservation_id,)).fetchone()
 
 
@@ -90,9 +92,6 @@ def cancel(reservation_id: int, user: dict = Depends(current_user)):
             raise HTTPException(409, f"A {res['status'].replace('_', ' ')} reservation can't be cancelled.")
         if user["kind"] == "guest" and res["check_in"] <= date.today():
             raise HTTPException(409, "Your stay has started. Please contact the front desk.")
+        # trg_refund_cancelled_reservation refunds any payment.
         conn.execute("UPDATE reservations SET status = 'cancelled' WHERE id = %s", (reservation_id,))
-        conn.execute(
-            "UPDATE payments SET status = 'refunded' WHERE reservation_id = %s AND status = 'paid'",
-            (reservation_id,),
-        )
         return conn.execute(DETAILS, (reservation_id,)).fetchone()

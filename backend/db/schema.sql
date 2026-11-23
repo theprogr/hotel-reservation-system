@@ -5,11 +5,14 @@
 CREATE EXTENSION IF NOT EXISTS btree_gist;
 
 CREATE TABLE hotels (
-    id      SERIAL PRIMARY KEY,
-    name    VARCHAR(255) NOT NULL,
-    address VARCHAR(255),
-    city    VARCHAR(100) NOT NULL,
-    phone   VARCHAR(20)
+    id          SERIAL PRIMARY KEY,
+    name        VARCHAR(255) NOT NULL,
+    address     VARCHAR(255),
+    city        VARCHAR(100) NOT NULL,
+    phone       VARCHAR(20),
+    -- Official star class, shown on hotel cards and used as a search filter.
+    stars       SMALLINT NOT NULL DEFAULT 3 CHECK (stars BETWEEN 1 AND 5),
+    description TEXT
 );
 
 CREATE TABLE roles (
@@ -36,6 +39,8 @@ CREATE TABLE rooms (
     room_type       VARCHAR(50) NOT NULL
         CHECK (room_type IN ('single', 'double', 'twin', 'deluxe', 'suite')),
     price_per_night NUMERIC(10, 2) NOT NULL CHECK (price_per_night >= 0),
+    -- How many people the room sleeps. A trigger stops bookings for more guests.
+    capacity        SMALLINT NOT NULL DEFAULT 2 CHECK (capacity BETWEEN 1 AND 8),
     status          VARCHAR(50) NOT NULL DEFAULT 'available'
         CHECK (status IN ('available', 'maintenance', 'out_of_service')),
     -- A room number can repeat across hotels, but not inside one hotel.
@@ -61,6 +66,7 @@ CREATE TABLE reservations (
     room_id    INTEGER NOT NULL REFERENCES rooms(id),
     check_in   DATE NOT NULL,
     check_out  DATE NOT NULL,
+    num_guests SMALLINT NOT NULL DEFAULT 1 CHECK (num_guests > 0),
     status     VARCHAR(50) NOT NULL DEFAULT 'pending'
         CHECK (status IN ('pending', 'confirmed', 'checked_in', 'checked_out', 'cancelled', 'no_show')),
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -122,6 +128,7 @@ SELECT
     res.check_in,
     res.check_out,
     res.created_at,
+    res.num_guests,
     res.check_out - res.check_in AS nights,
     (res.check_out - res.check_in) * r.price_per_night AS total_price,
     g.id AS guest_id,
@@ -130,6 +137,7 @@ SELECT
     r.id AS room_id,
     r.room_number,
     r.room_type,
+    r.capacity,
     r.price_per_night,
     h.id AS hotel_id,
     h.name AS hotel_name,

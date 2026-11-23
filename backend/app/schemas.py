@@ -48,6 +48,7 @@ class LoginIn(BaseModel):
 # --- Bookings ---
 class ReservationIn(StayDates):
     room_id: int
+    num_guests: int = Field(1, ge=1, le=8)  # the database checks it against the room's capacity
 
 
 class PaymentIn(BaseModel):
@@ -65,6 +66,8 @@ class HotelIn(BaseModel):
     address: Optional[str] = Field(None, max_length=255)
     city: str = Field(min_length=1, max_length=100)
     phone: Optional[str] = Field(None, max_length=20)
+    stars: int = Field(3, ge=1, le=5)
+    description: Optional[str] = Field(None, max_length=1000)
 
 
 class RoleIn(BaseModel):
@@ -79,6 +82,7 @@ class RoomIn(BaseModel):
     room_number: int = Field(gt=0)
     room_type: RoomType
     price_per_night: Decimal = Field(ge=0, max_digits=10, decimal_places=2)
+    capacity: int = Field(2, ge=1, le=8)
     status: RoomStatus = "available"
 
 
@@ -86,6 +90,7 @@ class RoomUpdate(BaseModel):
     room_number: Optional[int] = Field(None, gt=0)
     room_type: Optional[RoomType] = None
     price_per_night: Optional[Decimal] = Field(None, ge=0, max_digits=10, decimal_places=2)
+    capacity: Optional[int] = Field(None, ge=1, le=8)
     status: Optional[RoomStatus] = None
 
 

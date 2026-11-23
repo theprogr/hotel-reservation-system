@@ -9,6 +9,7 @@ import random
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from urllib.parse import urlparse
 
 import bcrypt
 import psycopg
@@ -27,6 +28,24 @@ FIRST = ["Aigerim", "Dias", "Madina", "Nurlan", "Aruzhan", "Yerlan", "Dana", "Ti
 LAST = ["Akhmetov", "Bekova", "Omarov", "Serikova", "Kassym", "Nurgali", "Tulegen", "Abenov", "Zhaksylyk", "Ospanov", "Karim", "Sadykov"]
 TASKS = ["Air conditioner repair", "Plumbing check", "Deep cleaning", "Replace light fixtures", "Repaint walls", "TV repair", "Replace door lock", "Furniture repair"]
 ROOM_PRICES = {"single": 18000, "double": 28000, "twin": 26000, "deluxe": 45000, "suite": 80000}
+ROOM_CAPACITY = {"single": 1, "double": 2, "twin": 2, "deluxe": 3, "suite": 4}
+HOTEL_STARS = {"Grand": 5, "Royal": 5, "Altyn": 4, "Mountain View": 4, "Silk Road": 4,
+               "Riverside": 3, "Central": 3, "Steppe": 3, "City": 2, "Nomad": 2}
+STAR_PRICE_FACTOR = {1: 0.6, 2: 0.75, 3: 1.0, 4: 1.3, 5: 1.7}
+CITY_NOTES = {
+    "Almaty": ["a short drive from the Medeu skating rink", "with views of the Zailiysky Alatau mountains", "near Panfilov Park"],
+    "Astana": ["close to the Baiterek tower", "a walk from the Ishim river embankment", "near the Expo district"],
+    "Shymkent": ["near the old town and its bazaar", "close to Shymkent's central park"],
+    "Aktau": ["steps from the Caspian Sea shore", "on the seaside promenade"],
+    "Atyrau": ["by the Ural river, where Europe meets Asia", "in the business district"],
+    "Karaganda": ["near Central Park and the theatre", "in the city centre"],
+    "Turkistan": ["minutes from the Mausoleum of Khoja Ahmed Yasawi", "next to the Karavan-Saray complex"],
+    "Taraz": ["near the ancient Aisha Bibi mausoleum", "in the historic centre"],
+    "Pavlodar": ["on the Irtysh river embankment", "close to the central square"],
+    "Kostanay": ["near the Tobol river", "in the quiet city centre"],
+}
+HOTEL_PERKS = ["Free Wi-Fi throughout", "Breakfast is served every morning", "Guests can use the fitness room",
+               "There is free parking on site", "The restaurant serves Kazakh and European dishes"]
 
 ROLES = [
     ("System Administrator", "Full access across all hotels", "admin"),
@@ -64,16 +83,24 @@ def seed(cur, rng):
     now = datetime.now()
     password_hash = bcrypt.hashpw(DEMO_PASSWORD.encode(), bcrypt.gensalt()).decode()
 
-    # Hotels: 50, spread across cities.
-    hotel_ids = []
+    # Hotels: 50, spread across cities. Grander names get more stars.
+    hotel_ids, hotel_stars = [], {}
     for i in range(50):
         city = CITIES[i % len(CITIES)]
         word = HOTEL_WORDS[(i // len(CITIES)) % len(HOTEL_WORDS)]
-        cur.execute(
-            "INSERT INTO hotels (name, address, city, phone) VALUES (%s, %s, %s, %s) RETURNING id",
-            (f"{word} Hotel {city}", f"{rng.randint(1, 200)} {rng.choice(STREETS)}", city, f"+7700{rng.randint(1000000, 9999999)}"),
+        stars = max(1, min(5, HOTEL_STARS[word] + rng.choice([-1, 0, 0, 0, 1])))
+        description = (
+            f"A {stars}-star hotel in {city}, {rng.choice(CITY_NOTES[city])}. "
+            f"{rng.choice(HOTEL_PERKS)}, and the front desk is open 24 hours."
         )
-        hotel_ids.append(cur.fetchone()[0])
+        cur.execute(
+            "INSERT INTO hotels (name, address, city, phone, stars, description) VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+            (f"{word} Hotel {city}", f"{rng.randint(1, 200)} {rng.choice(STREETS)}", city,
+             f"+7700{rng.randint(1000000, 9999999)}", stars, description),
+        )
+        hotel_id = cur.fetchone()[0]
+        hotel_ids.append(hotel_id)
+        hotel_stars[hotel_id] = stars
 
     # Roles.
     role_ids = {}
@@ -84,17 +111,20 @@ def seed(cur, rng):
         )
         role_ids[name] = cur.fetchone()[0]
 
-    # Rooms: 6 per hotel, in a realistic price range.
+    # Rooms: 6 per hotel. Price depends on the room type and the hotel's stars.
     rooms = []
     for hotel_id in hotel_ids:
         for n, room_type in enumerate(["single", "double", "double", "twin", "deluxe", "suite"]):
             floor = rng.randint(1, 5)
-            price = ROOM_PRICES[room_type] + rng.randrange(0, 8000, 500)
+            base = ROOM_PRICES[room_type] * STAR_PRICE_FACTOR[hotel_stars[hotel_id]]
+            price = round(base / 500) * 500 + rng.randrange(0, 6000, 500)
+            capacity = ROOM_CAPACITY[room_type]
             cur.execute(
-                "INSERT INTO rooms (hotel_id, room_number, room_type, price_per_night) VALUES (%s, %s, %s, %s) RETURNING id",
-                (hotel_id, floor * 100 + n + 1, room_type, price),
+                """INSERT INTO rooms (hotel_id, room_number, room_type, price_per_night, capacity)
+                   VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+                (hotel_id, floor * 100 + n + 1, room_type, price, capacity),
             )
-            rooms.append((cur.fetchone()[0], hotel_id, price))
+            rooms.append((cur.fetchone()[0], hotel_id, price, capacity))
 
     # Employees: the demo accounts first, then a small team in every hotel.
     def add_employee(hotel_id, role, first, last, email, salary):
@@ -137,7 +167,7 @@ def seed(cur, rng):
     # Reservations: walk through each sampled room's calendar so that stays never overlap.
     made = 0
     methods = ["card", "cash", "kaspi", "bank_transfer"]
-    for room_id, _hotel_id, price in rng.sample(rooms, 80):
+    for room_id, _hotel_id, price, capacity in rng.sample(rooms, 80):
         # Start anywhere from 60 days ago to 20 days ahead, for past, current and future stays.
         cursor_day = today + timedelta(days=rng.randint(-60, 20))
         for _ in range(rng.randint(1, 3)):
@@ -152,9 +182,9 @@ def seed(cur, rng):
             else:
                 status = rng.choice(["pending", "confirmed", "confirmed", "cancelled"])
             cur.execute(
-                """INSERT INTO reservations (guest_id, room_id, check_in, check_out, status, created_at)
-                   VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
-                (rng.choice(guest_ids), room_id, check_in, check_out, status,
+                """INSERT INTO reservations (guest_id, room_id, check_in, check_out, num_guests, status, created_at)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                (rng.choice(guest_ids), room_id, check_in, check_out, rng.randint(1, capacity), status,
                  datetime.combine(check_in, datetime.min.time()) - timedelta(days=rng.randint(1, 30))),
             )
             reservation_id = cur.fetchone()[0]
@@ -171,9 +201,9 @@ def seed(cur, rng):
                     (reservation_id, price * nights, paid_on, rng.choice(methods), pay_status),
                 )
 
-    # Maintenance: 100 tasks. Rooms with unfinished work are marked as under maintenance.
+    # Maintenance: 100 tasks. The room status trigger closes rooms that have unfinished work.
     for _ in range(100):
-        room_id, hotel_id, _price = rng.choice(rooms)
+        room_id, hotel_id, _price, _capacity = rng.choice(rooms)
         created = now - timedelta(days=rng.randint(0, 120), hours=rng.randint(0, 23))
         status = rng.choices(["completed", "pending", "in_progress", "cancelled"], [90, 3, 3, 4])[0]
         completed = created + timedelta(hours=rng.randint(1, 48)) if status == "completed" else None
@@ -184,20 +214,24 @@ def seed(cur, rng):
                VALUES (%s, %s, %s, %s, %s, %s)""",
             (room_id, rng.choice(technicians[hotel_id]), rng.choice(TASKS), status, created, completed),
         )
-        if status in ("pending", "in_progress"):
-            cur.execute("UPDATE rooms SET status = 'maintenance' WHERE id = %s", (room_id,))
     return made
+
+
+# Databases this script may erase with --reset: the local one and the hosted Neon one.
+RESETTABLE = {"hotel_v2", "neondb"}
 
 
 def main():
     url = os.environ["DATABASE_URL"]
-    if url.rsplit("/", 1)[-1] != "hotel_v2" and "--reset" in sys.argv:
-        sys.exit("Refusing --reset: DATABASE_URL does not point at hotel_v2.")
+    database = urlparse(url).path.lstrip("/")
+    if "--reset" in sys.argv and database not in RESETTABLE:
+        sys.exit(f"Refusing --reset: database '{database}' is not one of {sorted(RESETTABLE)}.")
     with psycopg.connect(url) as conn:
         with conn.cursor() as cur:
             if "--reset" in sys.argv:
                 cur.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
-            cur.execute((HERE / "schema.sql").read_text())
+            for name in ["schema.sql", "functions.sql", "triggers.sql"]:
+                cur.execute((HERE / name).read_text())
             seed(cur, random.Random(42))
         rows = {}
         for table in ["hotels", "roles", "guests", "rooms", "employees", "reservations", "room_maintenance", "payments"]:

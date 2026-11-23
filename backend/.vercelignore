@@ -4,5 +4,7 @@
 .pytest_cache
 __pycache__
 tests
-db
 graphify-out
+# The API reads db/queries.sql, so the db folder is uploaded; these aren't needed there.
+db/*.py
+db/*.txt

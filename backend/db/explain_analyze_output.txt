@@ -1,0 +1,44 @@
+EXPLAIN ANALYZE for reservations_guest_idx, run 2026-11-23 15:17
+
+Table size for the test: 29670 reservations. Guest 60 has 300 of them.
+Query:
+SELECT id, room_id, check_in, check_out, status
+  FROM reservations
+ WHERE guest_id = 60
+ ORDER BY check_in DESC
+
+
+BEFORE: without the index
+------------------------------------------------------------
+Sort  (cost=631.22..631.97 rows=300 width=26) (actual time=0.883..0.889 rows=300 loops=1)
+  Sort Key: check_in DESC
+  Sort Method: quicksort  Memory: 39kB
+  Buffers: shared hit=248
+  ->  Seq Scan on reservations  (cost=0.00..618.88 rows=300 width=26) (actual time=0.003..0.856 rows=300 loops=1)
+        Filter: (guest_id = '60'::smallint)
+        Rows Removed by Filter: 29370
+        Buffers: shared hit=248
+Planning:
+  Buffers: shared hit=60
+Planning Time: 0.142 ms
+Execution Time: 0.898 ms
+
+AFTER: with CREATE INDEX reservations_guest_idx ON reservations (guest_id)
+------------------------------------------------------------
+Sort  (cost=283.56..284.31 rows=300 width=26) (actual time=0.106..0.112 rows=300 loops=1)
+  Sort Key: check_in DESC
+  Sort Method: quicksort  Memory: 39kB
+  Buffers: shared hit=206 read=3
+  ->  Bitmap Heap Scan on reservations  (cost=6.61..271.22 rows=300 width=26) (actual time=0.027..0.081 rows=300 loops=1)
+        Recheck Cond: (guest_id = '60'::smallint)
+        Heap Blocks: exact=206
+        Buffers: shared hit=206 read=3
+        ->  Bitmap Index Scan on reservations_guest_idx  (cost=0.00..6.54 rows=300 width=0) (actual time=0.016..0.016 rows=300 loops=1)
+              Index Cond: (guest_id = '60'::smallint)
+              Buffers: shared read=3
+Planning:
+  Buffers: shared hit=24 read=1
+Planning Time: 0.036 ms
+Execution Time: 0.122 ms
+
+All test rows were rolled back. The database is unchanged.

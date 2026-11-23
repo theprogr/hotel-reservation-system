@@ -1,5 +1,7 @@
 """Staff tools. Every query is limited to the employee's hotel, except for admins."""
+import re
 from datetime import date
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -103,9 +105,9 @@ def create_room(body: RoomIn, user: dict = Depends(managers)):
         raise HTTPException(422, "Choose a hotel for this room.")
     ensure_same_hotel(user, hotel_id)
     return fetch_one(
-        """INSERT INTO rooms (hotel_id, room_number, room_type, price_per_night, status)
-           VALUES (%s, %s, %s, %s, %s) RETURNING *""",
-        (hotel_id, body.room_number, body.room_type, body.price_per_night, body.status),
+        """INSERT INTO rooms (hotel_id, room_number, room_type, price_per_night, capacity, status)
+           VALUES (%s, %s, %s, %s, %s, %s) RETURNING *""",
+        (hotel_id, body.room_number, body.room_type, body.price_per_night, body.capacity, body.status),
     )
 
 
@@ -151,21 +153,20 @@ def list_maintenance(
 @router.post("/maintenance", status_code=201)
 def create_maintenance(body: MaintenanceIn, user: dict = Depends(desk)):
     with pool.connection() as conn:
-        room = conn.execute("SELECT hotel_id, status FROM rooms WHERE id = %s FOR UPDATE", (body.room_id,)).fetchone()
+        # Locking the room makes changes to its tasks run one at a time, so the
+        # room status trigger always counts the open tasks correctly.
+        room = conn.execute("SELECT hotel_id FROM rooms WHERE id = %s FOR UPDATE", (body.room_id,)).fetchone()
         if not room:
             raise HTTPException(404, "Room not found.")
         ensure_same_hotel(user, room["hotel_id"])
         employee = conn.execute("SELECT hotel_id FROM employees WHERE id = %s", (body.employee_id,)).fetchone()
         if not employee or employee["hotel_id"] != room["hotel_id"]:
             raise HTTPException(422, "Assign this task to an employee at the same hotel.")
-        task = conn.execute(
+        # trg_room_maintenance_status closes the room to new bookings until the work is done.
+        return conn.execute(
             "INSERT INTO room_maintenance (room_id, employee_id, task_type) VALUES (%s, %s, %s) RETURNING *",
             (body.room_id, body.employee_id, body.task_type),
         ).fetchone()
-        # Stop new bookings until the work is done. Existing bookings stay visible to staff.
-        if room["status"] == "available":
-            conn.execute("UPDATE rooms SET status = 'maintenance' WHERE id = %s", (body.room_id,))
-        return task
 
 
 @router.patch("/maintenance/{task_id}")
@@ -183,22 +184,33 @@ def update_maintenance(task_id: int, body: MaintenanceUpdate, user: dict = Depen
             raise HTTPException(403, "This task is assigned to someone else.")
         if task["status"] in ("completed", "cancelled"):
             raise HTTPException(409, "This task is already closed.")
-        updated = conn.execute(
-            """UPDATE room_maintenance
-               SET status = %(status)s::varchar,
-                   completed_at = CASE WHEN %(status)s::varchar = 'completed' THEN CURRENT_TIMESTAMP END
-               WHERE id = %(id)s RETURNING *""",
-            {"status": body.status, "id": task_id},
+        # trg_maintenance_completed_at records the finish time, and
+        # trg_room_maintenance_status reopens the room once its last open task closes.
+        return conn.execute(
+            "UPDATE room_maintenance SET status = %s WHERE id = %s RETURNING *",
+            (body.status, task_id),
         ).fetchone()
-        # When the last open task on a room closes, the room can be booked again.
-        conn.execute(
-            """UPDATE rooms SET status = 'available'
-               WHERE id = %(room)s AND status = 'maintenance' AND NOT EXISTS (
-                   SELECT 1 FROM room_maintenance
-                   WHERE room_id = %(room)s AND status IN ('pending', 'in_progress'))""",
-            {"room": task["room_id"]},
-        )
-        return updated
+
+
+# --- Reports: the queries in db/queries.sql ---
+def load_queries() -> dict[str, str]:
+    text = (Path(__file__).resolve().parents[2] / "db" / "queries.sql").read_text()
+    return {name: sql.strip() for name, sql in re.findall(r"-- name: (\w+)\n(.*?)(?=\n-- name:|\Z)", text, re.S)}
+
+
+REPORTS = load_queries()
+
+
+@router.get("/reports")
+def list_reports(user: dict = Depends(managers)):
+    return list(REPORTS)
+
+
+@router.get("/reports/{name}")
+def run_report(name: str, user: dict = Depends(managers)):
+    if name not in REPORTS:
+        raise HTTPException(404, "Report not found.")
+    return fetch_all(REPORTS[name], {"hotel_id": hotel_scope(user)})
 
 
 # --- Payments and guests ---

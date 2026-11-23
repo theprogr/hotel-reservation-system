@@ -59,6 +59,13 @@ def invalid_value(_: Request, __: errors.CheckViolation):
     return JSONResponse({"detail": "One of the values isn't allowed."}, 422)
 
 
+@app.exception_handler(errors.RaiseException)
+def business_rule(_: Request, e: errors.RaiseException):
+    # Raised by our own triggers and functions (db/triggers.sql), whose messages are
+    # written for users, so they can be shown as they are.
+    return JSONResponse({"detail": e.diag.message_primary}, 409)
+
+
 @app.exception_handler(errors.NotNullViolation)
 def missing_value(_: Request, e: errors.NotNullViolation):
     return JSONResponse({"detail": f"{e.diag.column_name} is required."}, 422)

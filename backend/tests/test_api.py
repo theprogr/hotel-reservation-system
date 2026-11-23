@@ -36,10 +36,11 @@ def world(client):
     hotel_a = fetch_one("INSERT INTO hotels (name, city) VALUES (%s, 'Testville') RETURNING id", (f"Test A {tag}",))["id"]
     hotel_b = fetch_one("INSERT INTO hotels (name, city) VALUES (%s, 'Testville') RETURNING id", (f"Test B {tag}",))["id"]
 
-    def room(hotel, number, price=10000):
+    def room(hotel, number, price=10000, capacity=2):
         return fetch_one(
-            "INSERT INTO rooms (hotel_id, room_number, room_type, price_per_night) VALUES (%s, %s, 'double', %s) RETURNING id",
-            (hotel, number, price),
+            """INSERT INTO rooms (hotel_id, room_number, room_type, price_per_night, capacity)
+               VALUES (%s, %s, 'double', %s, %s) RETURNING id""",
+            (hotel, number, price, capacity),
         )["id"]
 
     def employee(hotel, level):
@@ -289,6 +290,61 @@ def test_check_in_requires_payment_and_start_date(client, world):
     assert status("checked_in") == 200
     assert client.post(f"/reservations/{reservation['id']}/cancel", headers=guest).status_code == 409
     assert status("checked_out") == 200
+
+
+def test_room_capacity_is_enforced_by_trigger(client, world):
+    room = world["room"](world["hotel_a"], 113, capacity=2)
+    guest = world["new_guest"]()
+    too_many = client.post("/reservations", json={"room_id": room, "num_guests": 3, **stay()}, headers=guest)
+    assert too_many.status_code == 409
+    assert "sleeps at most 2" in too_many.json()["detail"]
+    ok = client.post("/reservations", json={"room_id": room, "num_guests": 2, **stay()}, headers=guest)
+    assert ok.status_code == 201 and ok.json()["num_guests"] == 2
+
+
+def test_hotel_search_and_availability(client, world):
+    hotel = world["hotel_b"]
+    small = world["room"](hotel, 201, price=9000, capacity=1)
+    big = world["room"](hotel, 202, price=20000, capacity=4)
+    guest = world["new_guest"]()
+    params = {"city": "Testville", **stay(20)}
+
+    def found(**extra):
+        hotels = client.get("/hotels/search", params={**params, **extra}).json()["hotels"]
+        return next((h for h in hotels if h["id"] == hotel), None)
+
+    # A group of 3 only fits the big room, so the hotel shows its price.
+    assert found(guests=3)["from_price"] == 20000
+    # A single traveller gets the cheaper room.
+    assert found(guests=1)["from_price"] == 9000
+    rooms = client.get(f"/hotels/{hotel}/availability", params={**stay(20), "guests": 1}).json()
+    assert {small, big} <= {r["id"] for r in rooms}
+    # Once the big room is booked, a group of 3 has nowhere to stay here.
+    client.post("/reservations", json={"room_id": big, "num_guests": 3, **stay(20)}, headers=guest)
+    assert found(guests=3) is None
+    assert found(guests=1) is not None
+    # Star filter: test hotels have the default 3 stars.
+    assert found(guests=1, stars="4,5") is None
+    assert found(guests=1, stars="3") is not None
+
+
+def test_public_hotel_pages(client, world):
+    detail = client.get(f"/hotels/{world['hotel_a']}")
+    assert detail.status_code == 200 and "room_types" in detail.json()
+    assert client.get("/hotels/999999").status_code == 404
+    destinations = client.get("/destinations").json()
+    assert any(d["city"] == "Testville" for d in destinations)
+
+
+def test_reports_are_for_managers_and_scoped(client, world):
+    names = client.get("/staff/reports", headers=world["manager_a"]).json()
+    assert len(names) >= 3
+    for name in names:
+        assert client.get(f"/staff/reports/{name}", headers=world["manager_a"]).status_code == 200
+        assert client.get(f"/staff/reports/{name}", headers=world["desk_a"]).status_code == 403
+    rows = client.get("/staff/reports/occupancy_ranking", headers=world["manager_a"]).json()
+    assert len(rows) == 1  # a manager sees only their own hotel
+    assert client.get("/staff/reports/drop_everything", headers=world["admin"]).status_code == 404
 
 
 def test_maintenance_blocks_booking_until_finished(client, world):
