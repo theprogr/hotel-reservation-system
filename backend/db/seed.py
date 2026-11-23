@@ -167,7 +167,10 @@ def seed(cur, rng):
     # Reservations: walk through each sampled room's calendar so that stays never overlap.
     made = 0
     methods = ["card", "cash", "kaspi", "bank_transfer"]
-    for room_id, _hotel_id, price, capacity in rng.sample(rooms, 80):
+    # The demo staff work at the first hotel, so it always gets bookings for their reports.
+    demo_rooms = [r for r in rooms if r[1] == first_hotel]
+    other_rooms = rng.sample([r for r in rooms if r[1] != first_hotel], 80)
+    for room_id, _hotel_id, price, capacity in demo_rooms + other_rooms:
         # Start anywhere from 60 days ago to 20 days ahead, for past, current and future stays.
         cursor_day = today + timedelta(days=rng.randint(-60, 20))
         for _ in range(rng.randint(1, 3)):

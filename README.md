@@ -1,6 +1,6 @@
-# Hotel Reservation System
+# Qonaq: Hotel Reservation System
 
-A full-stack hotel booking app. Guests search for free rooms, book and pay. Staff manage reservations, rooms, maintenance and employees, with access limited by role and hotel.
+A full-stack hotel booking app for Kazakhstan. Guests search hotels by city, dates and group size, compare them, and book and pay. Staff manage reservations, rooms, maintenance and employees, and see reports, with access limited by role and hotel.
 
 **Live site:** https://hotel-reservation-kz.vercel.app
 
@@ -44,6 +44,30 @@ Other rules enforced by the database:
 - Status columns accept only known values
 - A reservation can have only one paid payment, even if "Pay" is clicked twice
 - Foreign keys are indexed, and the `reservation_details` view gives the screens one readable row per booking
+
+### Where each part lives
+
+| File | What's in it |
+|---|---|
+| [schema.sql](backend/db/schema.sql) | Tables, keys, CHECK constraints, indexes, the `reservation_details` view |
+| [functions.sql](backend/db/functions.sql) | PL/pgSQL functions: `calculate_reservation_total`, `find_available_rooms`, `occupancy_rate` |
+| [triggers.sql](backend/db/triggers.sql) | 6 triggers for business rules (below) |
+| [queries.sql](backend/db/queries.sql) | 5 report queries with joins, aggregation, `HAVING` and a window function, shown in the staff Reports tab |
+| [explain_analyze.py](backend/db/explain_analyze.py) | EXPLAIN ANALYZE before and after `reservations_guest_idx`; output in [explain_analyze_output.txt](backend/db/explain_analyze_output.txt) |
+| [seed.py](backend/db/seed.py) | Loads the files above and adds 50+ rows of sample data per table |
+
+### Triggers
+
+| Trigger | Business rule |
+|---|---|
+| `trg_reservation_rules` | A room can only be booked while it's open, and never for more guests than it sleeps |
+| `trg_validate_payment` | A payment must equal the stay's price, and cancelled or no-show bookings can't be paid |
+| `trg_confirm_paid_reservation` | Paying a pending booking confirms it |
+| `trg_refund_cancelled_reservation` | Cancelling a booking refunds its payment |
+| `trg_maintenance_completed_at` | Completing a task records when it was finished |
+| `trg_room_maintenance_status` | A room with unfinished maintenance is closed to bookings, and reopens when the work is done |
+
+The API relies on these rules instead of repeating them in Python, so they also apply to any data written directly in SQL.
 
 ## Roles
 

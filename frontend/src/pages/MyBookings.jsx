@@ -40,6 +40,7 @@ function Booking({ booking, onChange }) {
         <div><dt>Check-in</dt><dd>{formatDate(booking.check_in)}</dd></div>
         <div><dt>Check-out</dt><dd>{formatDate(booking.check_out)}</dd></div>
         <div><dt>Nights</dt><dd>{booking.nights}</dd></div>
+        <div><dt>Guests</dt><dd>{booking.num_guests}</dd></div>
         <div><dt>Total</dt><dd>{formatMoney(booking.total_price)}</dd></div>
         {booking.payment_status && <div><dt>Payment</dt><dd>{label(booking.payment_status)} · {label(booking.payment_method)}</dd></div>}
       </dl>

@@ -7,8 +7,8 @@ function useAfterLogin() {
   const { state } = useLocation();
   return (account) => {
     if (account.kind === "employee") navigate("/staff", { replace: true });
-    // Coming back to search keeps the dates the guest had already chosen.
-    else navigate(state?.returnTo || "/bookings", { replace: true, state: { search: state?.search } });
+    // Coming back to checkout keeps the room and dates the guest had already chosen.
+    else navigate(state?.returnTo || "/bookings", { replace: true, state: state?.booking });
   };
 }
 

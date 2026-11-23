@@ -52,6 +52,26 @@ export function isoDate(daysFromToday = 0) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+export function addDays(iso, days) {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export const nightsBetween = (checkIn, checkOut) =>
+  Math.round((new Date(`${checkOut}T00:00:00`) - new Date(`${checkIn}T00:00:00`)) / 86400000);
+
+export const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// What each room type is, as the app defines it.
+export const ROOM_INFO = {
+  single: { beds: "1 single bed", size: "14 m²" },
+  double: { beds: "1 double bed", size: "20 m²" },
+  twin: { beds: "2 single beds", size: "20 m²" },
+  deluxe: { beds: "1 king bed and a sofa bed", size: "30 m²" },
+  suite: { beds: "1 king bed, separate living room", size: "45 m²" },
+};
+
 export const formatDate = (value) =>
   new Date(`${String(value).slice(0, 10)}T00:00:00`).toLocaleDateString("en-GB", {
     day: "numeric",

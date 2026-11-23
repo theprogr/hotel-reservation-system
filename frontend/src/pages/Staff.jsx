@@ -152,13 +152,18 @@ function Rooms({ user }) {
   const [message, run] = useAction(list);
   const isAdmin = user.access_level === "admin";
   const canEdit = isAdmin || user.access_level === "manager";
-  const blank = { hotel_id: "", room_number: "", room_type: "double", price_per_night: "" };
+  const blank = { hotel_id: "", room_number: "", room_type: "double", price_per_night: "", capacity: "2" };
   const [form, setForm] = useState(blank);
   const set = (key) => (e) => setForm({ ...form, [key]: e.target.value });
 
   const add = async (e) => {
     e.preventDefault();
-    const body = { ...form, room_number: Number(form.room_number), hotel_id: form.hotel_id ? Number(form.hotel_id) : null };
+    const body = {
+      ...form,
+      room_number: Number(form.room_number),
+      capacity: Number(form.capacity),
+      hotel_id: form.hotel_id ? Number(form.hotel_id) : null,
+    };
     if (await run(() => api("/staff/rooms", { method: "POST", body }))) setForm(blank);
   };
   const editPrice = (room) => {
@@ -180,6 +185,7 @@ function Rooms({ user }) {
               </select>
             </label>
             <label>Price per night<input type="number" min="0" step="500" required value={form.price_per_night} onChange={set("price_per_night")} /></label>
+            <label>Sleeps<input type="number" min="1" max="8" required value={form.capacity} onChange={set("capacity")} /></label>
             <button className="primary">Add room</button>
           </div>
         </form>
@@ -188,12 +194,13 @@ function Rooms({ user }) {
       <Table
         list={list}
         empty="No rooms yet."
-        columns={canEdit ? ["Hotel", "Room", "Type", "Price", "Status", "Actions"] : ["Hotel", "Room", "Type", "Price", "Status"]}
+        columns={canEdit ? ["Hotel", "Room", "Type", "Sleeps", "Price", "Status", "Actions"] : ["Hotel", "Room", "Type", "Sleeps", "Price", "Status"]}
         render={(room) => (
           <tr key={room.id}>
             <td>{room.hotel_name}</td>
             <td>{room.room_number}</td>
             <td>{label(room.room_type)}</td>
+            <td>{room.capacity}</td>
             <td className="nowrap">{formatMoney(room.price_per_night)}</td>
             <td><StatusBadge status={room.status} /></td>
             {canEdit && (
@@ -484,7 +491,69 @@ function Roles() {
   );
 }
 
+const REPORT_INFO = {
+  revenue_by_hotel: ["Revenue by hotel", "Paid revenue per hotel and month, last 6 months."],
+  occupancy_ranking: ["Occupancy ranking", "Share of room-nights booked in the last 30 days, ranked within each city."],
+  top_guests: ["Top guests", "Guests with 2 or more stays, by total spent."],
+  room_type_performance: ["Room types", "Bookings, average stay, average price and cancellation rate per room type."],
+  maintenance_workload: ["Maintenance workload", "Open and completed tasks per technician, with average time to finish."],
+};
+const MONEY_COLUMNS = ["revenue", "total_spent", "avg_price_per_night"];
+
+function Reports() {
+  const [names, setNames] = useState([]);
+  const [active, setActive] = useState("");
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api("/staff/reports").then((list) => { setNames(list); setActive(list[0] || ""); }).catch((e) => setError(e.message));
+  }, []);
+  useEffect(() => {
+    if (!active) return;
+    setRows(null);
+    api(`/staff/reports/${active}`).then(setRows).catch((e) => setError(e.message));
+  }, [active]);
+
+  const columns = rows?.length ? Object.keys(rows[0]) : [];
+  const show = (column, value) => {
+    if (value == null) return "—";
+    if (MONEY_COLUMNS.includes(column)) return formatMoney(value);
+    if (column.endsWith("_percent")) return `${value}%`;
+    return String(value);
+  };
+
+  return (
+    <section>
+      <div className="report-picker" role="tablist" aria-label="Reports">
+        {names.map((n) => (
+          <button key={n} role="tab" aria-selected={n === active} className={n === active ? "chip active" : "chip"} onClick={() => setActive(n)}>
+            {REPORT_INFO[n]?.[0] || label(n)}
+          </button>
+        ))}
+      </div>
+      {active && <p className="muted report-note">{REPORT_INFO[active]?.[1]} The SQL is in <code>backend/db/queries.sql</code>.</p>}
+      {error && <p className="error" role="alert">{error}</p>}
+      {!rows && !error && <p className="muted">Loading…</p>}
+      {rows?.length === 0 && <p className="card center muted">No data for this report yet.</p>}
+      {rows?.length > 0 && (
+        <div className="table-scroll">
+          <table>
+            <thead><tr>{columns.map((c) => <th key={c} scope="col">{label(c)}</th>)}</tr></thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={i}>{columns.map((c) => <td key={c} className={typeof row[c] === "number" ? "nowrap" : ""}>{show(c, row[c])}</td>)}</tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 const TABS = [
+  { id: "reports", name: "Reports", levels: ["admin", "manager"], view: Reports },
   { id: "reservations", name: "Reservations", levels: ["admin", "manager", "front_desk"], view: Reservations },
   { id: "rooms", name: "Rooms", levels: ["admin", "manager", "front_desk", "maintenance"], view: Rooms },
   { id: "maintenance", name: "Maintenance", levels: ["admin", "manager", "front_desk", "maintenance"], view: Maintenance },
@@ -498,7 +567,8 @@ const TABS = [
 export default function Staff() {
   const { user } = useAuth();
   const tabs = TABS.filter((t) => t.levels.includes(user.access_level));
-  const [active, setActive] = useState(tabs[0]?.id);
+  // Open on day-to-day work; Reports is one click away.
+  const [active, setActive] = useState((tabs.find((t) => t.id !== "reports") || tabs[0])?.id);
   const tab = tabs.find((t) => t.id === active);
   const View = tab?.view;
 
