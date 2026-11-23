@@ -6,6 +6,8 @@ A full-stack hotel booking app for Kazakhstan. Guests search hotels by city, dat
 
 **Stack:** PostgreSQL (Neon) · FastAPI (Python) with hand-written SQL · React (Vite) · hosted on Vercel
 
+**Photos:** city photos are real photos of each city, and room photos are examples from other hotels, since the hotels here are sample data. All come from Wikimedia Commons under free licenses, credited on the site's [Photo credits](https://hotel-reservation-kz.vercel.app/credits) page and listed in [photos.js](frontend/src/photos.js). If a photo can't load, a drawn illustration appears instead.
+
 ## The main feature: no double bookings
 
 Two guests can click "Book" on the same room at the same moment. Checking availability first and then saving isn't enough, because both requests can pass the check before either one saves.

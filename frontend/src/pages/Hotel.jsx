@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api, formatDate, formatMoney, label, nightsBetween, plural, ROOM_INFO } from "../api";
 import { useAuth } from "../auth";
 import { HotelArt } from "../components/Art";
+import Photo, { cityPhoto, roomPhoto } from "../components/Photo";
 import SearchBar, { searchFromParams, searchLink } from "../components/SearchBar";
 import Stars from "../components/Stars";
 
@@ -57,10 +58,17 @@ export default function Hotel() {
         </header>
 
         <div className="gallery">
-          <HotelArt hotel={hotel} className="gallery-main" />
-          <HotelArt hotel={hotel} variant="room" />
-          <HotelArt hotel={{ ...hotel, id: hotel.id + 100 }} variant="room" />
+          <Photo photo={cityPhoto(hotel.city, hotel.id)} alt={`${hotel.city}, Kazakhstan`} label={`${hotel.city}, Kazakhstan`}
+            className="gallery-main" sizes="(max-width: 560px) 100vw, 66vw" fallback={<HotelArt hotel={hotel} className="gallery-main" />} />
+          {[0, 1].map((n) => {
+            const type = hotel.room_types[n % hotel.room_types.length]?.room_type;
+            return (
+              <Photo key={n} photo={roomPhoto(type, hotel.id + n)} alt={`Example of a ${type} room`} label={`Example ${type} room`}
+                width={500} sizes="33vw" fallback={<HotelArt hotel={{ ...hotel, id: hotel.id + n * 100 }} variant="room" />} />
+            );
+          })}
         </div>
+        <p className="muted small photo-note">City photo shows {hotel.city}. Room photos are examples from other hotels. <Link to="/credits">Photo credits</Link></p>
 
         <div className="hotel-info">
           <section>

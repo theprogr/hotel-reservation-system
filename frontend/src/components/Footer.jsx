@@ -31,6 +31,7 @@ export default function Footer() {
           <p className="footer-title">About this project</p>
           <ul>
             <li><a href="https://github.com/theprogr/hotel-reservation-system">Source code on GitHub</a></li>
+            <li><Link to="/credits">Photo credits</Link></li>
             <li className="muted small">PostgreSQL · FastAPI · React</li>
           </ul>
         </div>

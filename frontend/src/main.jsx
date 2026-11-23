@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from "./auth";
 import Footer from "./components/Footer";
 import { Login, Register } from "./pages/Account";
 import Checkout from "./pages/Checkout";
+import Credits from "./pages/Credits";
 import Home from "./pages/Home";
 import Hotel from "./pages/Hotel";
 import MyBookings from "./pages/MyBookings";
@@ -71,6 +72,7 @@ function App() {
           <Route path="/search" element={<SearchResults />} />
           <Route path="/hotels/:id" element={<Hotel />} />
           <Route path="/book" element={<Checkout />} />
+          <Route path="/credits" element={<Credits />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           <Route path="/bookings" element={<Protected kind="guest"><MyBookings /></Protected>} />

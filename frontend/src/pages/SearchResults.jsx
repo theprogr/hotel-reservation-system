@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api, formatMoney, label, plural } from "../api";
 import { HotelArt } from "../components/Art";
+import Photo, { hotelPhoto } from "../components/Photo";
 import SearchBar, { searchFromParams } from "../components/SearchBar";
 import Stars from "../components/Stars";
 
@@ -55,7 +56,9 @@ function ResultCard({ hotel, search, nights }) {
   const link = `/hotels/${hotel.id}?${new URLSearchParams(Object.entries(search).filter(([, v]) => v))}`;
   return (
     <article className="result-card">
-      <Link to={link} className="result-art" tabIndex={-1} aria-hidden="true"><HotelArt hotel={hotel} /></Link>
+      <Link to={link} className="result-art" tabIndex={-1} aria-hidden="true">
+        <Photo photo={hotelPhoto(hotel)} alt="" label="Example room" width={500} sizes="220px" fallback={<HotelArt hotel={hotel} />} />
+      </Link>
       <div className="result-main">
         <div className="result-title">
           <h3><Link to={link}>{hotel.name}</Link></h3>

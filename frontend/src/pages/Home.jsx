@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, formatMoney, label, plural, ROOM_INFO } from "../api";
 import { CityArt, HotelArt } from "../components/Art";
+import Photo, { cityPhoto, hotelPhoto, roomPhoto } from "../components/Photo";
 import SearchBar, { defaultSearch, searchLink } from "../components/SearchBar";
 import Stars from "../components/Stars";
 
@@ -31,7 +32,10 @@ export function HotelCard({ hotel, search }) {
   const link = `/hotels/${hotel.id}?${new URLSearchParams(Object.entries(search).filter(([, v]) => v))}`;
   return (
     <article className="hotel-card">
-      <Link to={link} tabIndex={-1} aria-hidden="true"><HotelArt hotel={hotel} className="card-art" /></Link>
+      <Link to={link} tabIndex={-1} aria-hidden="true" className="card-art">
+        <Photo photo={hotelPhoto(hotel)} alt="" label="Example room" width={500} sizes="300px"
+          fallback={<HotelArt hotel={hotel} />} />
+      </Link>
       <div className="hotel-card-body">
         <h3><Link to={link}>{hotel.name}</Link></h3>
         <p className="muted small">{hotel.city}{hotel.address ? `, ${hotel.address}` : ""}</p>
@@ -96,7 +100,7 @@ export default function Home() {
         <Carousel title="Popular destinations" subtitle="Cities where travellers book the most hotels">
           {destinations.map((d) => (
             <Link key={d.city} to={searchLink({ ...search, city: d.city })} className="destination-card">
-              <CityArt city={d.city} />
+              <Photo photo={cityPhoto(d.city)} alt="" width={500} sizes="300px" fallback={<CityArt city={d.city} />} />
               <span className="destination-name">{d.city}</span>
               <span className="destination-meta">{plural(d.hotels, "hotel")} · from {formatMoney(d.from_price)}</span>
             </Link>
@@ -120,7 +124,8 @@ export default function Home() {
           <div className="type-grid">
             {Object.entries(ROOM_INFO).map(([type, info]) => (
               <Link key={type} to={searchLink(search, { room_type: type })} className="type-card">
-                <HotelArt hotel={{ id: type.length * 3, city: "Astana", name: label(type) }} variant="room" />
+                <Photo photo={roomPhoto(type)} alt="" width={500} sizes="220px" className="type-photo"
+                  fallback={<HotelArt hotel={{ id: type.length * 3, city: "Astana", name: label(type) }} variant="room" />} />
                 <span className="type-name">{label(type)}</span>
                 <span className="muted small">{info.beds}</span>
               </Link>

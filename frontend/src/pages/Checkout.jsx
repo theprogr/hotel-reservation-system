@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { api, formatDate, formatMoney, label, nightsBetween, plural, ROOM_INFO } from "../api";
 import { useAuth } from "../auth";
 import { HotelArt } from "../components/Art";
+import Photo, { roomPhoto } from "../components/Photo";
 import Stars from "../components/Stars";
 
 function Steps({ current }) {
@@ -49,7 +50,8 @@ export default function Checkout() {
       <Steps current={user ? 1 : 0} />
       <div className="checkout">
         <aside className="card summary">
-          <HotelArt hotel={hotel} className="summary-art" />
+          <Photo photo={roomPhoto(room.room_type, hotel.id)} alt="" label={`Example ${room.room_type} room`} width={500}
+            sizes="340px" className="summary-art" fallback={<HotelArt hotel={hotel} className="summary-art" />} />
           <div className="tag-row"><span className="tag">Hotel</span><Stars count={hotel.stars} size="small" /></div>
           <h2>{hotel.name}</h2>
           <p className="muted small">{hotel.address ? `${hotel.address}, ` : ""}{hotel.city}</p>
