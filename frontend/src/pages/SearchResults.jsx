@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { api, formatMoney, label, plural } from "../api";
+import { api, formatMoney, label, plural, ROOM_INFO } from "../api";
 import { HotelArt } from "../components/Art";
 import Photo, { hotelPhoto } from "../components/Photo";
 import SearchBar, { searchFromParams } from "../components/SearchBar";
@@ -10,43 +10,78 @@ const PAGE_SIZE = 20;
 const ROOM_TYPES = ["single", "double", "twin", "deluxe", "suite"];
 const SORTS = [["recommended", "Our top picks"], ["price_low", "Price (lowest first)"], ["price_high", "Price (highest first)"], ["stars", "Stars (highest first)"]];
 
+const BUDGETS = [["", "Any price"], ["25000", "Up to 25,000 ₸"], ["50000", "Up to 50,000 ₸"], ["100000", "Up to 100,000 ₸"]];
+
 function Filters({ params, update }) {
   const stars = (params.get("stars") || "").split(",").filter(Boolean);
+  const maxPrice = params.get("max_price") || "";
+  const roomType = params.get("room_type") || "";
+  const isPreset = BUDGETS.some(([v]) => v === maxPrice);
+  const [custom, setCustom] = useState(isPreset ? "" : maxPrice);
+  useEffect(() => { if (isPreset) setCustom(""); }, [maxPrice]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const toggleStar = (s) => {
     const next = stars.includes(s) ? stars.filter((x) => x !== s) : [...stars, s];
     update({ stars: next.sort().join(",") });
   };
+  const active = stars.length + (maxPrice ? 1 : 0) + (roomType ? 1 : 0);
+
   return (
     <div className="filters-inner">
-      <h2 className="filter-title">Filter by</h2>
-      <fieldset>
-        <legend>Your budget per night</legend>
-        <label className="inline-input">
-          Up to
-          <input type="number" min="0" step="5000" placeholder="Any" defaultValue={params.get("max_price") || ""}
-            key={params.get("max_price") || "none"}
-            onBlur={(e) => update({ max_price: e.target.value })}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); update({ max_price: e.target.value }); } }} />
-          ₸
-        </label>
+      <div className="filter-head">
+        <h2 className="filter-title">Filter by</h2>
+        {active > 0 && (
+          <button type="button" className="text-button" onClick={() => update({ stars: "", max_price: "", room_type: "" })}>
+            Clear all ({active})
+          </button>
+        )}
+      </div>
+
+      <fieldset className="filter-group">
+        <legend>Budget per night</legend>
+        <div className="chip-list">
+          {BUDGETS.map(([value, text]) => (
+            <button key={text} type="button" className={maxPrice === value ? "chip active" : "chip"} aria-pressed={maxPrice === value}
+              onClick={() => update({ max_price: value })}>
+              {text}
+            </button>
+          ))}
+        </div>
+        <form className="custom-budget" onSubmit={(e) => { e.preventDefault(); update({ max_price: custom }); }}>
+          <label className="visually-hidden" htmlFor="custom-budget">Custom maximum price per night in tenge</label>
+          <div className={!isPreset && maxPrice ? "money-input active" : "money-input"}>
+            <input id="custom-budget" type="number" inputMode="numeric" min="0" step="1000" placeholder="Custom max"
+              value={custom} onChange={(e) => setCustom(e.target.value)} />
+            <span aria-hidden="true">₸</span>
+          </div>
+          <button type="submit" disabled={!custom}>Apply</button>
+        </form>
       </fieldset>
-      <fieldset>
-        <legend>Star rating</legend>
-        {["5", "4", "3", "2", "1"].map((s) => (
-          <label key={s} className="check">
-            <input type="checkbox" checked={stars.includes(s)} onChange={() => toggleStar(s)} />
-            <Stars count={Number(s)} size="small" />
-          </label>
-        ))}
+
+      <fieldset className="filter-group">
+        <legend>Star rating <span className="muted small">(choose any)</span></legend>
+        <div className="star-chips">
+          {["5", "4", "3", "2", "1"].map((s) => (
+            <button key={s} type="button" className={stars.includes(s) ? "chip star-chip active" : "chip star-chip"} aria-pressed={stars.includes(s)}
+              aria-label={`${s} stars`} onClick={() => toggleStar(s)}>
+              {s}<span aria-hidden="true">★</span>
+            </button>
+          ))}
+        </div>
       </fieldset>
-      <fieldset>
+
+      <fieldset className="filter-group">
         <legend>Room type</legend>
-        <label className="check"><input type="radio" name="room_type" checked={!params.get("room_type")} onChange={() => update({ room_type: "" })} /> Any</label>
-        {ROOM_TYPES.map((t) => (
-          <label key={t} className="check">
-            <input type="radio" name="room_type" checked={params.get("room_type") === t} onChange={() => update({ room_type: t })} /> {label(t)}
-          </label>
-        ))}
+        <div className="type-options">
+          {[["", "Any type", "All rooms"], ...ROOM_TYPES.map((t) => [t, label(t), ROOM_INFO[t].beds])].map(([value, name, beds]) => (
+            <button key={name} type="button" className={roomType === value ? "type-option active" : "type-option"} aria-pressed={roomType === value}
+              onClick={() => update({ room_type: value })}>
+              <span className="type-option-name">{name}</span>
+              <span className="type-option-beds">{beds}</span>
+              {roomType === value && <span className="tick" aria-hidden="true">✓</span>}
+            </button>
+          ))}
+        </div>
       </fieldset>
     </div>
   );
